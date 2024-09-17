@@ -2,8 +2,8 @@ obs = obslua
 ffi = require("ffi")
 
 -- Constants
-local SCRIPT_NAME = "AIFB - OBS - Zoom and Follow Mouse"
-local CROP_FILTER_NAME = "AifbObsZoomAndFollowCrop"
+local SCRIPT_NAME = "OBS - Zoom and Follow Mouse - EG"
+local CROP_FILTER_NAME = "ObsZoomAndFollowCropEg"
 local VERSION = "0.1.0"
 
 -- Global variables
@@ -175,6 +175,7 @@ local function update_zoom()
     end
 
     get_source_info(source)
+    set_initial_bounding_box(source)
 
     local mouse_x, mouse_y = get_mouse_pos()
     
@@ -214,7 +215,7 @@ local function update_zoom()
     local t = math.min((obs.os_gettime_ns() / 1000000 - zoom_start_time) / zoom_duration, 1)
     t = t * t * (3 - 2 * t)  -- Smooth step interpolation
 
-    local speed = distance(zoom_x, zoom_y, zoom_x_target, zoom_y_target) / smooth_factor
+    local speed = smooth_factor > 0 and distance(zoom_x, zoom_y, zoom_x_target, zoom_y_target) / smooth_factor or 0
     speed = math.min(speed, max_speed)
 
     zoom_x = lerp(zoom_x, zoom_x_target, speed * t)
@@ -333,6 +334,16 @@ function script_load(settings)
     hotkey_save_array = obs.obs_data_get_array(settings, "zoom_and_follow.follow.toggle")
     obs.obs_hotkey_load(hotkey_follow_id, hotkey_save_array)
     obs.obs_data_array_release(hotkey_save_array)
+
+    -- Register callbacks
+    local sh = obs.obs_get_signal_handler()
+    obs.signal_handler_connect(sh, "source_rename", on_source_rename)
+    obs.signal_handler_connect(sh, "source_remove", on_source_remove)
+    obs.obs_frontend_add_event_callback(function(event)
+        if event == obs.OBS_FRONTEND_EVENT_SCENE_CHANGED then
+            on_scene_change()
+        end
+    end)
 end
 
 function script_save(settings)
@@ -348,11 +359,22 @@ end
 function script_unload()
     obs.obs_hotkey_unregister(on_zoom_hotkey)
     obs.obs_hotkey_unregister(on_follow_hotkey)
+
+    -- Unregister callbacks
+    local sh = obs.obs_get_signal_handler()
+    obs.signal_handler_disconnect(sh, "source_rename", on_source_rename)
+    obs.signal_handler_disconnect(sh, "source_remove", on_source_remove)
+    obs.obs_frontend_remove_event_callback(on_scene_change)
 end
 
 function script_tick(seconds)
     if zoom_active or is_zooming then
-        update_zoom()
+        local success, error_message = pcall(update_zoom)
+        if not success then
+            log("Errore in update_zoom: " .. tostring(error_message))
+            -- Resetta lo zoom in caso di errore
+            reset_zoom()
+        end
     end
 end
 
@@ -375,88 +397,6 @@ local function set_initial_bounding_box(source)
             end
         end
         obs.obs_scene_release(scene)
-    end
-end
-
--- Modify the update_zoom function to include the bounding box setup
-local function update_zoom()
-    if zoom_source == "" or (not zoom_active and not is_zooming) then
-        return
-    end
-
-    local source = obs.obs_get_source_by_name(zoom_source)
-    if source == nil then
-        return
-    end
-
-    get_source_info(source)
-    set_initial_bounding_box(source)
-
-    local mouse_x, mouse_y = get_mouse_pos()
-    
-    if manual_offset then
-        mouse_x = mouse_x - manual_x_offset
-        mouse_y = mouse_y - manual_y_offset
-    end
-
-    mouse_x = math.max(0, math.min(mouse_x, source_width))
-    mouse_y = math.max(0, math.min(mouse_y, source_height))
-
-    if is_zooming then
-        local target_x = math.max(0, math.min(mouse_x - zoom_width / 2, source_width - zoom_width))
-        local target_y = math.max(0, math.min(mouse_y - zoom_height / 2, source_height - zoom_height))
-
-        if follow_active then
-            local dist = distance(zoom_x, zoom_y, target_x, target_y)
-            local max_dist = math.min(zoom_width, zoom_height) * active_border
-
-            if dist > max_dist then
-                local angle = math.atan2(target_y - zoom_y, target_x - zoom_x)
-                zoom_x_target = zoom_x + math.cos(angle) * (dist - max_dist)
-                zoom_y_target = zoom_y + math.sin(angle) * (dist - max_dist)
-            else
-                zoom_x_target = zoom_x
-                zoom_y_target = zoom_y
-            end
-        else
-            zoom_x_target = target_x
-            zoom_y_target = target_y
-        end
-    else
-        zoom_x_target = 0
-        zoom_y_target = 0
-    end
-
-    local t = math.min((obs.os_gettime_ns() / 1000000 - zoom_start_time) / zoom_duration, 1)
-    t = t * t * (3 - 2 * t)  -- Smooth step interpolation
-
-    local speed = smooth_factor > 0 and distance(zoom_x, zoom_y, zoom_x_target, zoom_y_target) / smooth_factor or 0
-    speed = math.min(speed, max_speed)
-
-    zoom_x = lerp(zoom_x, zoom_x_target, speed * t)
-    zoom_y = lerp(zoom_y, zoom_y_target, speed * t)
-
-    local new_zoom_x = lerp(zoom_x, zoom_x_target, speed * t)
-    local new_zoom_y = lerp(zoom_y, zoom_y_target, speed * t)
-    
-    if math.abs(new_zoom_x - zoom_x) > 0.1 or math.abs(new_zoom_y - zoom_y) > 0.1 then
-        zoom_x = new_zoom_x
-        zoom_y = new_zoom_y
-        update_crop_filter()
-    end
-
-    obs.obs_source_release(source)
-end
-
--- Add error handling to the script_tick function
-function script_tick(seconds)
-    if zoom_active or is_zooming then
-        local success, error_message = pcall(update_zoom)
-        if not success then
-            log("Errore in update_zoom: " .. tostring(error_message))
-            -- Resetta lo zoom in caso di errore
-            reset_zoom()
-        end
     end
 end
 
@@ -494,38 +434,4 @@ local function on_source_remove(calldata)
             zoom_source = ""
         end
     end
-end
-
-function script_load(settings)
-    hotkey_zoom_id = obs.obs_hotkey_register_frontend("zoom_and_follow.zoom.toggle", "Toggle Zoom", on_zoom_hotkey)
-    hotkey_follow_id = obs.obs_hotkey_register_frontend("zoom_and_follow.follow.toggle", "Toggle Follow", on_follow_hotkey)
-
-    local hotkey_save_array = obs.obs_data_get_array(settings, "zoom_and_follow.zoom.toggle")
-    obs.obs_hotkey_load(hotkey_zoom_id, hotkey_save_array)
-    obs.obs_data_array_release(hotkey_save_array)
-
-    hotkey_save_array = obs.obs_data_get_array(settings, "zoom_and_follow.follow.toggle")
-    obs.obs_hotkey_load(hotkey_follow_id, hotkey_save_array)
-    obs.obs_data_array_release(hotkey_save_array)
-
-    -- Register callbacks
-    local sh = obs.obs_get_signal_handler()
-    obs.signal_handler_connect(sh, "source_rename", on_source_rename)
-    obs.signal_handler_connect(sh, "source_remove", on_source_remove)
-    obs.obs_frontend_add_event_callback(function(event)
-        if event == obs.OBS_FRONTEND_EVENT_SCENE_CHANGED then
-            on_scene_change()
-        end
-    end)
-end
-
-function script_unload()
-    obs.obs_hotkey_unregister(on_zoom_hotkey)
-    obs.obs_hotkey_unregister(on_follow_hotkey)
-
-    -- Unregister callbacks
-    local sh = obs.obs_get_signal_handler()
-    obs.signal_handler_disconnect(sh, "source_rename", on_source_rename)
-    obs.signal_handler_disconnect(sh, "source_remove", on_source_remove)
-    obs.obs_frontend_remove_event_callback(on_scene_change)
 end
