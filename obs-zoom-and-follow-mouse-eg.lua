@@ -8,7 +8,7 @@ local ffi = require("ffi")
 local ZOOM_HOTKEY_NAME = "zoom_and_follow.zoom.toggle"
 local FOLLOW_HOTKEY_NAME = "zoom_and_follow.follow.toggle"
 local CROP_FILTER_NAME = "zoom_and_follow_crop"
-local UPDATE_INTERVAL = 33
+local UPDATE_INTERVAL = 16
 
 -- Variabili globali
 local zoom_active = false
@@ -434,7 +434,7 @@ local function smooth_zoom_out()
         end
     end
 
-    obs.timer_add(animate_zoom_out, 16) -- Circa 60 FPS
+    obs.timer_add(animate_zoom_out, UPDATE_INTERVAL) -- Circa 60 FPS
 end
 
 -- Gestori degli hotkey
@@ -531,7 +531,7 @@ local function on_scene_change()
                     update_crop(new_crop.left, new_crop.top, new_crop.right, new_crop.bottom)
                     
                     if progress < 1.0 then
-                        obs.timer_add(transition_crop, 16)
+                        obs.timer_add(transition_crop, UPDATE_INTERVAL)
                     end
                 end
                 
