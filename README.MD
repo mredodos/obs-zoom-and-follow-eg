@@ -1,8 +1,19 @@
 # OBS - Zoom and Follow Mouse EG
 
+🚀 **We're looking for testers!** 🚀
+
+> 🐧 **Linux** and 🍎 **macOS** users, we need your help!
+>
+> We're actively seeking testers to ensure smooth functionality across all platforms.
+> If you're using Linux or macOS, please try out this script and share your feedback.
+> Your input is crucial for improving cross-platform compatibility!
+>
+> To get involved, simply install the script and report any issues or successes.
+> Thank you for your support! 🙏
+
 ## Description
 
-This script for OBS Studio creates a dynamic zoom effect and follows the mouse movement on a selected video source. It is particularly useful for highlighting specific parts of the screen during recordings or live streaming, with support for multi-monitor setups.
+This script for OBS Studio creates a dynamic zoom effect and follows mouse movement on a selected video source. It is particularly useful for highlighting specific parts of the screen during recordings or live streaming, with support for multi-monitor setups.
 
 ## Features
 
@@ -14,6 +25,7 @@ This script for OBS Studio creates a dynamic zoom effect and follows the mouse m
 - Activation via hotkeys
 - Automatic scene switching management
 - Smooth transitions during scene changes
+- Debug mode for troubleshooting
 
 ## Requirements
 
@@ -34,6 +46,7 @@ The script offers several configuration options:
 - Zoom Value: Sets the maximum zoom level (from 1.1 to 5.0)
 - Zoom Speed: Adjusts the speed of the zoom effect (from 0.01 to 1.0)
 - Tracking Speed: Adjusts the speed of the tracking effect (from 0.01 to 1.0)
+- Debug Mode: Enables/disables debug messages for troubleshooting
 
 ## Usage
 
@@ -48,6 +61,7 @@ The script offers several configuration options:
 - Automatic scene switching management and source removal
 - Multi-monitor configuration support
 - Smooth transitions during scene changes while in zoom mode
+- Debug mode for easier troubleshooting
 
 ## Troubleshooting
 
@@ -57,6 +71,7 @@ If you encounter issues with the script, try:
 2. Restarting OBS Studio
 3. Checking the OBS logs for any error messages
 4. Ensuring your version of OBS Studio is compatible
+5. Enabling debug mode in the script settings for more information
 
 ## Support
 
@@ -81,3 +96,38 @@ A special thanks to the OBS Studio community for their support and feedback.
 ## Inspiration
 
 This script is inspired by various zoom and follow scripts in the OBS community, with additional features and improvements for multi-monitor support and smooth transitions.
+
+## Roadmap
+
+We have exciting plans for future enhancements to this script. Here's what you can look forward to:
+
+1. **Snapshot Feature**: Ability to capture snapshots of the zoomed video source.
+2. **Cursor Highlighting**:
+   - Visual highlighting of the cursor on the screen.
+   - Emphasizing mouse clicks with visual indicators.
+3. **Continuous Improvement**:
+   - Ongoing optimization for simplicity and usability.
+   - Regular updates to maintain compatibility with the latest OBS Studio versions.
+4. **Enhanced Documentation**:
+   - Continuous improvement of code comments and documentation.
+   - Making the script more accessible to programmers of all skill levels.
+
+We're committed to keeping the code as simple and efficient as possible while following best programming practices. Your feedback and contributions are always welcome to help shape the future of this script!
+
+## Changelog
+
+### Version 1.1 (Latest)
+
+- Added debug mode for easier troubleshooting
+- Improved multi-monitor support
+- Enhanced scene switching management
+- Implemented smooth transitions during scene changes
+- Optimized zoom and follow animations for better performance
+- Added customizable zoom and tracking speeds
+
+### Version 1.0
+
+- Initial release
+- Basic zoom and follow functionality
+- Support for Windows
+- Hotkey activation for zoom and follow features
