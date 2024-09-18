@@ -1,437 +1,511 @@
-obs = obslua
-ffi = require("ffi")
+-- Zoom e Follow Mouse per OBS Studio
+-- Versione 1.1
 
--- Constants
-local SCRIPT_NAME = "OBS - Zoom and Follow Mouse - EG"
-local CROP_FILTER_NAME = "ObsZoomAndFollowCropEg"
-local VERSION = "0.1.0"
+local obs = obslua
+local ffi = require("ffi")
 
--- Global variables
-local zoom_source = ""
-local zoom_filter = nil
-local hotkey_zoom_id = obs.OBS_INVALID_HOTKEY_ID
-local hotkey_follow_id = obs.OBS_INVALID_HOTKEY_ID
+-- Costanti
+local ZOOM_HOTKEY_NAME = "zoom_and_follow.zoom.toggle"
+local FOLLOW_HOTKEY_NAME = "zoom_and_follow.follow.toggle"
+local CROP_FILTER_NAME = "zoom_and_follow_crop"
+local UPDATE_INTERVAL = 33
+
+-- Variabili globali
 local zoom_active = false
-local follow_active = true
-local zoom_width = 1280
-local zoom_height = 720
-local active_border = 0.15
-local max_speed = 160
-local smooth_factor = 1.0
-local zoom_duration = 300
-local manual_offset = false
-local manual_x_offset = 0
-local manual_y_offset = 0
-local debug_logging = false
-
-local source_width = 0
-local source_height = 0
-local zoom_x = 0
-local zoom_y = 0
-local zoom_x_target = 0
-local zoom_y_target = 0
-local is_zooming = false
+local follow_active = false
+local zoom_value = 3.0
+local zoom_speed = 0.2
+local follow_speed = 0.2
+local source = nil
+local crop_filter = nil
+local original_crop = nil
+local current_crop = nil
+local target_crop = nil
+local current_scene = nil
+local current_filter_target = nil
+local target_zoom = 1.0
+local current_zoom = 1.0
 local zoom_start_time = 0
+local ZOOM_ANIMATION_DURATION = 300 -- millisecondi
+local animation_timer = nil
+local monitors = {}
+local zoom_hotkey_id = nil
+local follow_hotkey_id = nil
 
--- Platform-specific mouse position functions
-local get_mouse_pos
-if ffi.os == "Windows" then
-    ffi.cdef[[
-        typedef struct {
-            long x;
-            long y;
-        } POINT;
-        int GetCursorPos(POINT* lpPoint);
-    ]]
-    local point = ffi.new("POINT[1]")
-    function get_mouse_pos()
-        ffi.C.GetCursorPos(point)
-        return point[0].x, point[0].y
-    end
-elseif ffi.os == "Linux" then
-    ffi.cdef[[
-        typedef struct {
-            long x;
-            long y;
-        } XPoint;
-        typedef unsigned long Window;
-        typedef struct _XDisplay Display;
-        Display* XOpenDisplay(const char* display_name);
-        int XQueryPointer(Display* display, Window w, Window* root_return, Window* child_return, int* root_x_return, int* root_y_return, int* win_x_return, int* win_y_return, unsigned int* mask_return);
-        int XCloseDisplay(Display* display);
-    ]]
-    local x11 = ffi.load("X11")
-    local display = x11.XOpenDisplay(nil)
-    local root_window = x11.XDefaultRootWindow(display)
-    local root_x = ffi.new("int[1]")
-    local root_y = ffi.new("int[1]")
-    function get_mouse_pos()
-        x11.XQueryPointer(display, root_window, nil, nil, root_x, root_y, nil, nil, nil)
-        return root_x[0], root_y[0]
-    end
-elseif ffi.os == "OSX" then
-    ffi.cdef[[
-        typedef struct {
-            double x;
-            double y;
-        } CGPoint;
-        CGPoint CGEventGetLocation(void* event);
-        void* CGEventCreate(void* source);
-        void CFRelease(void* cf);
-    ]]
-    local core_graphics = ffi.load("CoreGraphics", true)
-    function get_mouse_pos()
-        local event = core_graphics.CGEventCreate(nil)
-        local point = core_graphics.CGEventGetLocation(event)
-        core_graphics.CFRelease(event)
-        return math.floor(point.x), math.floor(point.y)
-    end
-else
-    function get_mouse_pos()
-        log("Unsupported operating system for mouse position")
-        return 0, 0
-    end
-end
+-- Funzioni di utilità
 
--- Utility functions
+-- Funzione per registrare messaggi di log
 local function log(message)
-    if debug_logging then
-        print(message)
-    end
+    print("[Zoom and Follow] " .. message)
 end
 
-local function get_source_by_name(name)
-    local source = obs.obs_get_source_by_name(name)
-    if source ~= nil then
-        obs.obs_source_release(source)
+-- Funzione per ottenere le informazioni su tutti i monitor
+local function get_monitors_info()
+    if ffi.os == "Windows" then
+        ffi.cdef[[
+            typedef long BOOL;
+            typedef void* HANDLE;
+            typedef HANDLE HMONITOR;
+            typedef struct {
+                long left;
+                long top;
+                long right;
+                long bottom;
+            } RECT;
+            typedef struct {
+                unsigned long cbSize;
+                RECT rcMonitor;
+                RECT rcWork;
+                unsigned long dwFlags;
+            } MONITORINFO;
+            typedef BOOL (*MONITORENUMPROC)(HMONITOR, void*, RECT*, long);
+            
+            BOOL EnumDisplayMonitors(void*, void*, MONITORENUMPROC, long);
+            BOOL GetMonitorInfoA(HMONITOR, MONITORINFO*);
+        ]]
+
+        local function enum_callback(hMonitor, _, _, _)
+            local mi = ffi.new("MONITORINFO")
+            mi.cbSize = ffi.sizeof("MONITORINFO")
+            if ffi.C.GetMonitorInfoA(hMonitor, mi) ~= 0 then
+                table.insert(monitors, {
+                    left = mi.rcMonitor.left,
+                    top = mi.rcMonitor.top,
+                    right = mi.rcMonitor.right,
+                    bottom = mi.rcMonitor.bottom
+                })
+            end
+            return true
+        end
+
+        local callback = ffi.cast("MONITORENUMPROC", enum_callback)
+        ffi.C.EnumDisplayMonitors(nil, nil, callback, 0)
+        callback:free()
+    else
+        -- Per altri sistemi operativi, usa valori predefiniti per un singolo monitor
+        monitors = {{left = 0, top = 0, right = 1920, bottom = 1080}}
     end
-    return source
+    log("Rilevati " .. #monitors .. " monitor(s)")
 end
 
-local function create_filter(source, filter_name, filter_type, settings)
-    local filter = obs.obs_source_get_filter_by_name(source, filter_name)
-    if filter == nil then
-        filter = obs.obs_source_create_private(filter_type, filter_name, settings)
-        obs.obs_source_filter_add(source, filter)
+-- Funzione per ottenere la posizione del mouse
+local function get_mouse_pos()
+    if ffi.os == "Windows" then
+        ffi.cdef[[
+            typedef struct { long x; long y; } POINT;
+            bool GetCursorPos(POINT* point);
+        ]]
+        local point = ffi.new("POINT[1]")
+        if ffi.C.GetCursorPos(point) then
+            return point[0].x, point[0].y
+        end
     end
-    obs.obs_source_release(filter)
-    return filter
+    return 0, 0  -- Fallback se non riusciamo a ottenere la posizione del mouse
 end
 
-local function lerp(a, b, t)
-    return a + (b - a) * t
+-- Funzione per verificare se il tipo di sorgente è valido
+local function is_valid_source_type(source)
+    local source_id = obs.obs_source_get_id(source)
+    local valid_types = {
+        "ffmpeg_source", "browser_source", "vlc_source",
+        "monitor_capture", "window_capture", "game_capture",
+        "dshow_input", "av_capture_input"
+    }
+    for _, valid_type in ipairs(valid_types) do
+        if source_id == valid_type then
+            return true
+        end
+    end
+    return false
 end
 
-local function distance(x1, y1, x2, y2)
-    return math.sqrt((x2 - x1)^2 + (y2 - y1)^2)
+-- Funzione per trovare una sorgente video valida nella scena corrente
+local function find_valid_video_source()
+    local current_scene = obs.obs_frontend_get_current_scene()
+    if not current_scene then 
+        log("Nessuna scena corrente trovata")
+        return nil 
+    end
+
+    local scene = obs.obs_scene_from_source(current_scene)
+    local items = obs.obs_scene_enum_items(scene)
+
+    local function check_source(source)
+        if is_valid_source_type(source) then
+            return source
+        elseif obs.obs_source_get_type(source) == obs.OBS_SOURCE_TYPE_SCENE then
+            -- Cerca ricorsivamente in scene annidate
+            local nested_scene = obs.obs_scene_from_source(source)
+            local nested_items = obs.obs_scene_enum_items(nested_scene)
+            for _, nested_item in ipairs(nested_items) do
+                local nested_source = obs.obs_sceneitem_get_source(nested_item)
+                local valid_source = check_source(nested_source)
+                if valid_source then
+                    obs.sceneitem_list_release(nested_items)
+                    return valid_source
+                end
+            end
+            obs.sceneitem_list_release(nested_items)
+        end
+        return nil
+    end
+
+    local valid_source = nil
+    for _, item in ipairs(items) do
+        local item_source = obs.obs_sceneitem_get_source(item)
+        valid_source = check_source(item_source)
+        if valid_source then
+            break
+        end
+    end
+
+    obs.sceneitem_list_release(items)
+    obs.obs_source_release(current_scene)
+
+    if valid_source then
+        log("Trovata sorgente video valida: " .. obs.obs_source_get_name(valid_source))
+    else
+        log("Nessuna sorgente video valida trovata nella scena corrente")
+    end
+
+    return valid_source
 end
 
-local function get_source_info(source)
-    if source == nil then
-        return
+-- Funzione per applicare il filtro di ritaglio
+local function apply_crop_filter(target_source)
+    local parent_source = obs.obs_frontend_get_current_scene()
+    local filter_target = obs.obs_source_get_type(target_source) == obs.OBS_SOURCE_TYPE_SCENE and parent_source or target_source
+
+    -- Rimuovi il filtro dalla fonte o scena precedente se esiste
+    if current_filter_target and current_filter_target ~= filter_target then
+        local old_filter = obs.obs_source_get_filter_by_name(current_filter_target, CROP_FILTER_NAME)
+        if old_filter then
+            obs.obs_source_filter_remove(current_filter_target, old_filter)
+            obs.obs_source_release(old_filter)
+        end
     end
 
-    source_width = obs.obs_source_get_width(source)
-    source_height = obs.obs_source_get_height(source)
+    -- Applica il filtro solo se non esiste già
+    crop_filter = obs.obs_source_get_filter_by_name(filter_target, CROP_FILTER_NAME)
+    if not crop_filter then
+        crop_filter = obs.obs_source_create("crop_filter", CROP_FILTER_NAME, nil, nil)
+        obs.obs_source_filter_add(filter_target, crop_filter)
+        log("Filtro di ritaglio applicato a " .. obs.obs_source_get_name(filter_target))
+    else
+        obs.obs_source_release(crop_filter)
+    end
+
+    current_filter_target = filter_target
+    obs.obs_source_release(parent_source)
 end
 
-local function update_crop_filter()
-    if zoom_source == "" then
-        return
-    end
-
-    local source = obs.obs_get_source_by_name(zoom_source)
-    if source == nil then
-        return
-    end
-
-    local filter = obs.obs_source_get_filter_by_name(source, CROP_FILTER_NAME)
-    if filter == nil then
+-- Funzione per aggiornare il ritaglio
+local function update_crop(left, top, right, bottom)
+    if crop_filter then
         local settings = obs.obs_data_create()
-        filter = create_filter(source, CROP_FILTER_NAME, "crop_filter", settings)
+        obs.obs_data_set_int(settings, "left", math.floor(left + 0.5))
+        obs.obs_data_set_int(settings, "top", math.floor(top + 0.5))
+        obs.obs_data_set_int(settings, "right", math.floor(right + 0.5))
+        obs.obs_data_set_int(settings, "bottom", math.floor(bottom + 0.5))
+        obs.obs_source_update(crop_filter, settings)
         obs.obs_data_release(settings)
     end
-
-    local settings = obs.obs_source_get_settings(filter)
-    obs.obs_data_set_int(settings, "left", math.floor(zoom_x))
-    obs.obs_data_set_int(settings, "top", math.floor(zoom_y))
-    obs.obs_data_set_int(settings, "right", math.floor(source_width - zoom_width - zoom_x))
-    obs.obs_data_set_int(settings, "bottom", math.floor(source_height - zoom_height - zoom_y))
-    obs.obs_source_update(filter, settings)
-    obs.obs_data_release(settings)
-
-    obs.obs_source_release(filter)
-    obs.obs_source_release(source)
 end
 
-local function update_zoom()
-    if zoom_source == "" or (not zoom_active and not is_zooming) then
-        return
-    end
-
-    local source = obs.obs_get_source_by_name(zoom_source)
-    if source == nil then
-        return
-    end
-
-    get_source_info(source)
-    set_initial_bounding_box(source)
-
-    local mouse_x, mouse_y = get_mouse_pos()
+-- Funzione per calcolare il ritaglio target
+local function get_target_crop(mouse_x, mouse_y, current_zoom)
+    local source_width = obs.obs_source_get_width(source)
+    local source_height = obs.obs_source_get_height(source)
     
-    if manual_offset then
-        mouse_x = mouse_x - manual_x_offset
-        mouse_y = mouse_y - manual_y_offset
+    -- Trova il monitor su cui si trova il mouse
+    local current_monitor = monitors[1]  -- Default al primo monitor
+    for _, monitor in ipairs(monitors) do
+        if mouse_x >= monitor.left and mouse_x < monitor.right and
+           mouse_y >= monitor.top and mouse_y < monitor.bottom then
+            current_monitor = monitor
+            break
+        end
     end
 
-    mouse_x = math.max(0, math.min(mouse_x, source_width))
-    mouse_y = math.max(0, math.min(mouse_y, source_height))
+    local screen_width = current_monitor.right - current_monitor.left
+    local screen_height = current_monitor.bottom - current_monitor.top
 
-    if is_zooming then
-        local target_x = math.max(0, math.min(mouse_x - zoom_width / 2, source_width - zoom_width))
-        local target_y = math.max(0, math.min(mouse_y - zoom_height / 2, source_height - zoom_height))
+    local scale_x = source_width / screen_width
+    local scale_y = source_height / screen_height
 
-        if follow_active then
-            local dist = distance(zoom_x, zoom_y, target_x, target_y)
-            local max_dist = math.min(zoom_width, zoom_height) * active_border
+    local target_width = math.floor(source_width / current_zoom)
+    local target_height = math.floor(source_height / current_zoom)
 
-            if dist > max_dist then
-                local angle = math.atan2(target_y - zoom_y, target_x - zoom_x)
-                zoom_x_target = zoom_x + math.cos(angle) * (dist - max_dist)
-                zoom_y_target = zoom_y + math.sin(angle) * (dist - max_dist)
-            else
-                zoom_x_target = zoom_x
-                zoom_y_target = zoom_y
+    local target_x = math.floor((mouse_x - current_monitor.left) * scale_x - (target_width / 2))
+    local target_y = math.floor((mouse_y - current_monitor.top) * scale_y - (target_height / 2))
+
+    target_x = math.max(0, math.min(target_x, source_width - target_width))
+    target_y = math.max(0, math.min(target_y, source_height - target_height))
+
+    return {
+        left = target_x,
+        top = target_y,
+        right = source_width - (target_x + target_width),
+        bottom = source_height - (target_y + target_height)
+    }
+end
+
+-- Funzione per l'animazione dello zoom
+local function animate_zoom()
+    if not source then return end
+
+    local current_time = obs.os_gettime_ns() / 1000000 -- Converti nanosecondi in millisecondi
+    local elapsed_time = current_time - zoom_start_time
+    local progress = math.min(elapsed_time / ZOOM_ANIMATION_DURATION, 1.0)
+    
+    current_zoom = 1.0 + (target_zoom - 1.0) * progress
+    
+    local mouse_x, mouse_y = get_mouse_pos()
+    local new_crop = get_target_crop(mouse_x, mouse_y, current_zoom)
+    update_crop(new_crop.left, new_crop.top, new_crop.right, new_crop.bottom)
+    
+    if progress >= 1.0 then
+        if not zoom_active and not follow_active then
+            obs.timer_remove(animate_zoom)
+            animation_timer = nil
+        elseif not follow_active then
+            obs.timer_remove(animate_zoom)
+            animation_timer = nil
+        end
+    end
+end
+
+-- Funzione per lo zoom out smooth
+local function smooth_zoom_out()
+    local start_zoom = current_zoom
+    local start_time = obs.os_gettime_ns() / 1000000 -- Converti nanosecondi in millisecondi
+    local duration = 500 -- 500 ms per lo zoom out
+
+    local function animate_zoom_out()
+        local current_time = obs.os_gettime_ns() / 1000000
+        local progress = math.min((current_time - start_time) / duration, 1.0)
+        
+        current_zoom = start_zoom + (1.0 - start_zoom) * progress
+        
+        local mouse_x, mouse_y = get_mouse_pos()
+        local new_crop = get_target_crop(mouse_x, mouse_y, current_zoom)
+        update_crop(new_crop.left, new_crop.top, new_crop.right, new_crop.bottom)
+        
+        if progress >= 1.0 then
+            obs.timer_remove(animate_zoom_out)
+            if crop_filter then
+                obs.obs_source_filter_remove(current_filter_target, crop_filter)
+                crop_filter = nil
             end
-        else
-            zoom_x_target = target_x
-            zoom_y_target = target_y
+            current_filter_target = nil
+            zoom_active = false
+            follow_active = false
+        end
+    end
+
+    obs.timer_add(animate_zoom_out, 16) -- Circa 60 FPS
+end
+
+-- Gestori degli hotkey
+
+-- Gestore dell'hotkey per lo zoom
+local function on_zoom_hotkey(pressed)
+    if not pressed then return end
+
+    if not source then
+        source = find_valid_video_source()
+        if not source then
+            log("Nessuna sorgente video valida trovata nella scena corrente.")
+            return
+        end
+    end
+
+    if zoom_active then
+        smooth_zoom_out()
+    else
+        zoom_active = true
+        apply_crop_filter(source)
+        if not original_crop then
+            original_crop = {left = 0, top = 0, right = 0, bottom = 0}
+        end
+        target_zoom = zoom_value
+        zoom_start_time = obs.os_gettime_ns() / 1000000
+        
+        if not animation_timer then
+            animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL)
+        end
+    end
+
+    log("Zoom " .. (zoom_active and "attivato" or "in disattivazione"))
+end
+
+-- Gestore dell'hotkey per il follow
+local function on_follow_hotkey(pressed)
+    if not pressed or not zoom_active then return end
+
+    follow_active = not follow_active
+    if follow_active then
+        if not animation_timer then
+            animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL) -- Circa 30 FPS
         end
     else
-        zoom_x_target = 0
-        zoom_y_target = 0
-    end
-
-    local t = math.min((obs.os_gettime_ns() / 1000000 - zoom_start_time) / zoom_duration, 1)
-    t = t * t * (3 - 2 * t)  -- Smooth step interpolation
-
-    local speed = smooth_factor > 0 and distance(zoom_x, zoom_y, zoom_x_target, zoom_y_target) / smooth_factor or 0
-    speed = math.min(speed, max_speed)
-
-    zoom_x = lerp(zoom_x, zoom_x_target, speed * t)
-    zoom_y = lerp(zoom_y, zoom_y_target, speed * t)
-
-    local new_zoom_x = lerp(zoom_x, zoom_x_target, speed * t)
-    local new_zoom_y = lerp(zoom_y, zoom_y_target, speed * t)
-    
-    if math.abs(new_zoom_x - zoom_x) > 0.1 or math.abs(new_zoom_y - zoom_y) > 0.1 then
-        zoom_x = new_zoom_x
-        zoom_y = new_zoom_y
-        update_crop_filter()
-    end
-
-    obs.obs_source_release(source)
-end
-
--- Callback functions for hotkeys
-local function on_zoom_hotkey(pressed)
-    if pressed then
-        if zoom_active then
-            is_zooming = false
-        else
-            is_zooming = true
+        if animation_timer and not zoom_active then
+            obs.timer_remove(animate_zoom)
+            animation_timer = nil
         end
-        zoom_active = not zoom_active
-        zoom_start_time = obs.os_gettime_ns() / 1000000
-        log("Zoom: " .. tostring(zoom_active))
     end
+    log("Follow " .. (follow_active and "attivato" or "disattivato"))
 end
 
-local function on_follow_hotkey(pressed)
-    if pressed then
-        follow_active = not follow_active
-        log("Follow: " .. tostring(follow_active))
-    end
-end
-
--- OBS script functions
-function script_description()
-    return "Crops and resizes a source to simulate a zoomed in view tracked to the mouse. " ..
-           "Set activation hotkey in Settings. Version " .. VERSION
-end
-
-function script_properties()
-    local props = obs.obs_properties_create()
-
-    local source_list = obs.obs_properties_add_list(props, "zoom_source", "Zoom Source", obs.OBS_COMBO_TYPE_EDITABLE, obs.OBS_COMBO_FORMAT_STRING)
-    local sources = obs.obs_enum_sources()
-    if sources ~= nil then
-        for _, source in ipairs(sources) do
-            local name = obs.obs_source_get_name(source)
-            local id = obs.obs_source_get_id(source)
-            if id == "monitor_capture" or id == "window_capture" or id == "game_capture" or id == "xshm_input" or id == "screen_capture" then
-                obs.obs_property_list_add_string(source_list, name, name)
+-- Aggiungi questa nuova funzione per gestire il cambio di scena
+local function on_scene_change()
+    local new_scene = obs.obs_frontend_get_current_scene()
+    if new_scene ~= current_scene then
+        current_scene = new_scene
+        
+        -- Rimuovi il filtro dalla scena precedente se esiste
+        if current_filter_target then
+            local old_filter = obs.obs_source_get_filter_by_name(current_filter_target, CROP_FILTER_NAME)
+            if old_filter then
+                obs.obs_source_filter_remove(current_filter_target, old_filter)
+                obs.obs_source_release(old_filter)
             end
         end
+        
+        -- Trova una nuova sorgente video valida nella nuova scena
+        source = find_valid_video_source()
+        
+        if source then
+            -- Applica il filtro alla nuova sorgente
+            apply_crop_filter(source)
+            
+            if zoom_active then
+                -- Se lo zoom era attivo, riapplica lo zoom alla nuova scena gradualmente
+                local start_crop = {left = 0, top = 0, right = 0, bottom = 0}
+                local end_crop = get_target_crop(mouse_x, mouse_y, current_zoom)
+                local transition_duration = 300 -- millisecondi
+                local start_time = obs.os_gettime_ns() / 1000000
+                
+                local function transition_crop()
+                    local current_time = obs.os_gettime_ns() / 1000000
+                    local progress = math.min((current_time - start_time) / transition_duration, 1.0)
+                    
+                    local new_crop = {
+                        left = start_crop.left + (end_crop.left - start_crop.left) * progress,
+                        top = start_crop.top + (end_crop.top - start_crop.top) * progress,
+                        right = start_crop.right + (end_crop.right - start_crop.right) * progress,
+                        bottom = start_crop.bottom + (end_crop.bottom - start_crop.bottom) * progress
+                    }
+                    
+                    update_crop(new_crop.left, new_crop.top, new_crop.right, new_crop.bottom)
+                    
+                    if progress < 1.0 then
+                        obs.timer_add(transition_crop, 16)
+                    end
+                end
+                
+                transition_crop()
+            else
+                -- Se lo zoom non era attivo, assicurati che il filtro sia impostato senza zoom
+                update_crop(0, 0, 0, 0)
+            end
+        else
+            -- Se non viene trovata una fonte valida, disattiva lo zoom
+            zoom_active = false
+            follow_active = false
+            if animation_timer then
+                obs.timer_remove(animate_zoom)
+                animation_timer = nil
+            end
+            log("Zoom disattivato: nessuna fonte video valida nella nuova scena")
+        end
     end
-    obs.source_list_release(sources)
+    obs.obs_source_release(new_scene)
+end
 
-    obs.obs_properties_add_int(props, "zoom_width", "Zoom Window Width", 320, 3840, 1)
-    obs.obs_properties_add_int(props, "zoom_height", "Zoom Window Height", 240, 2160, 1)
-    obs.obs_properties_add_float_slider(props, "active_border", "Active Border", 0, 0.5, 0.01)
-    obs.obs_properties_add_int(props, "max_speed", "Max Scroll Speed", 0, 540, 10)
-    obs.obs_properties_add_float_slider(props, "smooth_factor", "Smooth Factor", 0.1, 10, 0.1)
-    obs.obs_properties_add_int_slider(props, "zoom_duration", "Zoom Duration (ms)", 0, 1000, 1)
+-- Funzioni OBS
 
-    local manual_offset_prop = obs.obs_properties_add_bool(props, "manual_offset", "Enable Manual Offset")
-    local manual_x_offset_prop = obs.obs_properties_add_int(props, "manual_x_offset", "Manual X Offset", -8000, 8000, 1)
-    local manual_y_offset_prop = obs.obs_properties_add_int(props, "manual_y_offset", "Manual Y Offset", -8000, 8000, 1)
+-- Descrizione dello script
+function script_description()
+    return "Zoom e segui il mouse per OBS Studio. Supporta configurazioni multi-monitor."
+end
 
-    obs.obs_properties_add_bool(props, "debug_logging", "Enable debug logging")
-
-    -- Set visibility callbacks
-    obs.obs_property_set_modified_callback(manual_offset_prop, function(props, property, settings)
-        local enabled = obs.obs_data_get_bool(settings, "manual_offset")
-        obs.obs_property_set_visible(manual_x_offset_prop, enabled)
-        obs.obs_property_set_visible(manual_y_offset_prop, enabled)
-        return true
-    end)
-
+-- Proprietà dello script
+function script_properties()
+    local props = obs.obs_properties_create()
+    obs.obs_properties_add_float_slider(props, "zoom_value", "Valore Zoom", 1.1, 5.0, 0.1)
+    obs.obs_properties_add_float_slider(props, "zoom_speed", "Velocità Zoom", 0.01, 1.0, 0.01)
+    obs.obs_properties_add_float_slider(props, "follow_speed", "Velocità Segui", 0.01, 1.0, 0.01)
     return props
 end
 
-function script_update(settings)
-    zoom_source = obs.obs_data_get_string(settings, "zoom_source")
-    zoom_width = obs.obs_data_get_int(settings, "zoom_width")
-    zoom_height = obs.obs_data_get_int(settings, "zoom_height")
-    active_border = obs.obs_data_get_double(settings, "active_border")
-    max_speed = obs.obs_data_get_int(settings, "max_speed")
-    smooth_factor = obs.obs_data_get_double(settings, "smooth_factor")
-    zoom_duration = obs.obs_data_get_int(settings, "zoom_duration")
-    
-    manual_offset = obs.obs_data_get_bool(settings, "manual_offset")
-    manual_x_offset = obs.obs_data_get_int(settings, "manual_x_offset")
-    manual_y_offset = obs.obs_data_get_int(settings, "manual_y_offset")
-    
-    debug_logging = obs.obs_data_get_bool(settings, "debug_logging")
+-- Valori predefiniti
+function script_defaults(settings)
+    obs.obs_data_set_default_double(settings, "zoom_value", 2.0)
+    obs.obs_data_set_default_double(settings, "zoom_speed", 0.1)
+    obs.obs_data_set_default_double(settings, "follow_speed", 0.1)
+end
 
-    -- Update source info
-    local source = obs.obs_get_source_by_name(zoom_source)
-    if source ~= nil then
-        get_source_info(source)
-        obs.obs_source_release(source)
+-- Aggiornamento delle impostazioni
+function script_update(settings)
+    zoom_value = obs.obs_data_get_double(settings, "zoom_value")
+    zoom_speed = obs.obs_data_get_double(settings, "zoom_speed")
+    follow_speed = obs.obs_data_get_double(settings, "follow_speed")
+
+    if zoom_active then
+        target_zoom = zoom_value
     end
 end
 
+-- Caricamento dello script
 function script_load(settings)
-    hotkey_zoom_id = obs.obs_hotkey_register_frontend("zoom_and_follow.zoom.toggle", "Toggle Zoom", on_zoom_hotkey)
-    hotkey_follow_id = obs.obs_hotkey_register_frontend("zoom_and_follow.follow.toggle", "Toggle Follow", on_follow_hotkey)
+    get_monitors_info()  -- Ottiene le informazioni sui monitor all'avvio
 
-    local hotkey_save_array = obs.obs_data_get_array(settings, "zoom_and_follow.zoom.toggle")
-    obs.obs_hotkey_load(hotkey_zoom_id, hotkey_save_array)
-    obs.obs_data_array_release(hotkey_save_array)
+    zoom_hotkey_id = obs.obs_hotkey_register_frontend(ZOOM_HOTKEY_NAME, "Attiva/Disattiva Zoom", on_zoom_hotkey)
+    follow_hotkey_id = obs.obs_hotkey_register_frontend(FOLLOW_HOTKEY_NAME, "Attiva/Disattiva Follow", on_follow_hotkey)
 
-    hotkey_save_array = obs.obs_data_get_array(settings, "zoom_and_follow.follow.toggle")
-    obs.obs_hotkey_load(hotkey_follow_id, hotkey_save_array)
-    obs.obs_data_array_release(hotkey_save_array)
+    local zoom_hotkey_save_array = obs.obs_data_get_array(settings, ZOOM_HOTKEY_NAME)
+    obs.obs_hotkey_load(zoom_hotkey_id, zoom_hotkey_save_array)
+    obs.obs_data_array_release(zoom_hotkey_save_array)
 
-    -- Register callbacks
-    local sh = obs.obs_get_signal_handler()
-    obs.signal_handler_connect(sh, "source_rename", on_source_rename)
-    obs.signal_handler_connect(sh, "source_remove", on_source_remove)
+    local follow_hotkey_save_array = obs.obs_data_get_array(settings, FOLLOW_HOTKEY_NAME)
+    obs.obs_hotkey_load(follow_hotkey_id, follow_hotkey_save_array)
+    obs.obs_data_array_release(follow_hotkey_save_array)
+
+    -- Aggiungi il gestore di eventi per il cambio di scena
     obs.obs_frontend_add_event_callback(function(event)
         if event == obs.OBS_FRONTEND_EVENT_SCENE_CHANGED then
             on_scene_change()
         end
     end)
+
+    script_update(settings)
+    
+    -- Applica il filtro alla scena corrente all'avvio
+    source = find_valid_video_source()
+    if source then
+        apply_crop_filter(source)
+    end
 end
 
+-- Salvataggio dello script
 function script_save(settings)
-    local hotkey_save_array = obs.obs_hotkey_save(hotkey_zoom_id)
-    obs.obs_data_set_array(settings, "zoom_and_follow.zoom.toggle", hotkey_save_array)
-    obs.obs_data_array_release(hotkey_save_array)
+    local zoom_hotkey_save_array = obs.obs_hotkey_save(zoom_hotkey_id)
+    obs.obs_data_set_array(settings, ZOOM_HOTKEY_NAME, zoom_hotkey_save_array)
+    obs.obs_data_array_release(zoom_hotkey_save_array)
 
-    hotkey_save_array = obs.obs_hotkey_save(hotkey_follow_id)
-    obs.obs_data_set_array(settings, "zoom_and_follow.follow.toggle", hotkey_save_array)
-    obs.obs_data_array_release(hotkey_save_array)
+    local follow_hotkey_save_array = obs.obs_hotkey_save(follow_hotkey_id)
+    obs.obs_data_set_array(settings, FOLLOW_HOTKEY_NAME, follow_hotkey_save_array)
+    obs.obs_data_array_release(follow_hotkey_save_array)
 end
 
+-- Scaricamento dello script
 function script_unload()
-    obs.obs_hotkey_unregister(on_zoom_hotkey)
-    obs.obs_hotkey_unregister(on_follow_hotkey)
-
-    -- Unregister callbacks
-    local sh = obs.obs_get_signal_handler()
-    obs.signal_handler_disconnect(sh, "source_rename", on_source_rename)
-    obs.signal_handler_disconnect(sh, "source_remove", on_source_remove)
-    obs.obs_frontend_remove_event_callback(on_scene_change)
-end
-
-function script_tick(seconds)
-    if zoom_active or is_zooming then
-        local success, error_message = pcall(update_zoom)
-        if not success then
-            log("Errore in update_zoom: " .. tostring(error_message))
-            -- Resetta lo zoom in caso di errore
-            reset_zoom()
-        end
+    if animation_timer then
+        obs.timer_remove(animate_zoom)
+        animation_timer = nil
     end
-end
-
--- Helper function to create the initial bounding box for the source
-local function set_initial_bounding_box(source)
-    local scene = obs.obs_scene_from_source(obs.obs_frontend_get_current_scene())
-    if scene and source then
-        local sceneitem = obs.obs_scene_find_source(scene, obs.obs_source_get_name(source))
-        if sceneitem then
-            if obs.obs_sceneitem_get_bounds_type(sceneitem) == obs.OBS_BOUNDS_NONE then
-                obs.obs_sceneitem_set_bounds_type(sceneitem, obs.OBS_BOUNDS_SCALE_INNER)
-                obs.obs_sceneitem_set_bounds_alignment(sceneitem, 0)
-                local video_info = obs.obs_video_info()
-                if obs.obs_get_video_info(video_info) then
-                    local bounds = obs.vec2()
-                    bounds.x = video_info.base_width
-                    bounds.y = video_info.base_height
-                    obs.obs_sceneitem_set_bounds(sceneitem, bounds)
-                end
-            end
-        end
-        obs.obs_scene_release(scene)
-    end
-end
-
--- Add a function to reset the zoom when changing scenes or sources
-local function reset_zoom()
-    if not zoom_active and not is_zooming and zoom_x == 0 and zoom_y == 0 then
-        return
-    end
-    zoom_active = false
-    is_zooming = false
-    zoom_x = 0
-    zoom_y = 0
-    zoom_x_target = 0
-    zoom_y_target = 0
-    update_crop_filter()
-end
-
--- Add callbacks for scene and source changes
-local function on_scene_change(scene)
-    reset_zoom()
-end
-
-local function on_source_rename(source_name, new_name)
-    if source_name == zoom_source then
-        zoom_source = new_name
-    end
-end
-
-local function on_source_remove(calldata)
-    local source = obs.calldata_source(calldata, "source")
-    if source ~= nil then
-        local name = obs.obs_source_get_name(source)
-        if name == zoom_source then
-            reset_zoom()
-            zoom_source = ""
-        end
+    if crop_filter then
+        obs.obs_source_filter_remove(source, crop_filter)
     end
 end
