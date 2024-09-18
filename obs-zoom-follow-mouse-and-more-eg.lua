@@ -1,16 +1,16 @@
--- Zoom e Follow Mouse per OBS Studio
--- Versione 1.2
+-- Zoom, Follow Mouse and MORE for OBS Studio
+-- Version 1.1.2
 
 local obs = obslua
 local ffi = require("ffi")
 
--- Costanti
+-- Constants
 local ZOOM_HOTKEY_NAME = "zoom_and_follow.zoom.toggle"
 local FOLLOW_HOTKEY_NAME = "zoom_and_follow.follow.toggle"
 local CROP_FILTER_NAME = "zoom_and_follow_crop"
-local UPDATE_INTERVAL = 33
+local UPDATE_INTERVAL = 16
 
--- Variabili globali
+-- Global variables
 local zoom_active = false
 local follow_active = false
 local zoom_value = 3.0
@@ -26,23 +26,23 @@ local current_filter_target = nil
 local target_zoom = 1.0
 local current_zoom = 1.0
 local zoom_start_time = 0
-local ZOOM_ANIMATION_DURATION = 300 -- millisecondi
+local ZOOM_ANIMATION_DURATION = 300 -- milliseconds
 local animation_timer = nil
 local monitors = {}
 local zoom_hotkey_id = nil
 local follow_hotkey_id = nil
 local debug_mode = false
 
--- Funzioni di utilità
+-- Utility functions
 
--- Funzione per registrare messaggi di log
+-- Function to log messages
 local function log(message)
     if debug_mode then
         print("[Zoom and Follow] " .. message)
     end
 end
 
--- Funzione per ottenere le informazioni su tutti i monitor
+-- Function to get information about all monitors
 local function get_monitors_info()
     if ffi.os == "Windows" then
         ffi.cdef[[
@@ -150,13 +150,13 @@ local function get_monitors_info()
             end
         end
     else
-        -- Per altri sistemi operativi, usa valori predefiniti per un singolo monitor
+        -- For other operating systems, use default values for a single monitor
         monitors = {{left = 0, top = 0, right = 1920, bottom = 1080}}
     end
     log("Detected " .. #monitors .. " monitor(s)")
 end
 
--- Funzione per ottenere la posizione del mouse
+-- Function to get mouse position
 local function get_mouse_pos()
     if ffi.os == "Windows" then
         ffi.cdef[[
@@ -220,10 +220,10 @@ local function get_mouse_pos()
 
         return point.x, point.y
     end
-    return 0, 0  -- Fallback se non riusciamo a ottenere la posizione del mouse
+    return 0, 0  -- Fallback if we can't get the mouse position
 end
 
--- Funzione per verificare se il tipo di sorgente è valido
+-- Function to check if the source type is valid
 local function is_valid_source_type(source)
     local source_id = obs.obs_source_get_id(source)
     local valid_types = {
@@ -239,7 +239,7 @@ local function is_valid_source_type(source)
     return false
 end
 
--- Funzione per trovare una sorgente video valida nella scena corrente
+-- Function to find a valid video source in the current scene
 local function find_valid_video_source()
     local current_scene = obs.obs_frontend_get_current_scene()
     if not current_scene then 
@@ -254,7 +254,7 @@ local function find_valid_video_source()
         if is_valid_source_type(source) then
             return source
         elseif obs.obs_source_get_type(source) == obs.OBS_SOURCE_TYPE_SCENE then
-            -- Cerca ricorsivamente in scene annidate
+            -- Recursively search in nested scenes
             local nested_scene = obs.obs_scene_from_source(source)
             local nested_items = obs.obs_scene_enum_items(nested_scene)
             for _, nested_item in ipairs(nested_items) do
@@ -291,12 +291,12 @@ local function find_valid_video_source()
     return valid_source
 end
 
--- Funzione per applicare il filtro di ritaglio
+-- Function to apply the crop filter
 local function apply_crop_filter(target_source)
     local parent_source = obs.obs_frontend_get_current_scene()
     local filter_target = obs.obs_source_get_type(target_source) == obs.OBS_SOURCE_TYPE_SCENE and parent_source or target_source
 
-    -- Rimuovi il filtro dalla fonte o scena precedente se esiste
+    -- Remove the filter from the previous source or scene if it exists
     if current_filter_target and current_filter_target ~= filter_target then
         local old_filter = obs.obs_source_get_filter_by_name(current_filter_target, CROP_FILTER_NAME)
         if old_filter then
@@ -305,7 +305,7 @@ local function apply_crop_filter(target_source)
         end
     end
 
-    -- Applica il filtro solo se non esiste già
+    -- Apply the filter only if it doesn't already exist
     crop_filter = obs.obs_source_get_filter_by_name(filter_target, CROP_FILTER_NAME)
     if not crop_filter then
         crop_filter = obs.obs_source_create("crop_filter", CROP_FILTER_NAME, nil, nil)
@@ -319,7 +319,7 @@ local function apply_crop_filter(target_source)
     obs.obs_source_release(parent_source)
 end
 
--- Funzione per aggiornare il ritaglio
+-- Function to update the crop
 local function update_crop(left, top, right, bottom)
     if crop_filter then
         local settings = obs.obs_data_create()
@@ -332,13 +332,13 @@ local function update_crop(left, top, right, bottom)
     end
 end
 
--- Funzione per calcolare il ritaglio target
+-- Function to calculate the target crop
 local function get_target_crop(mouse_x, mouse_y, current_zoom)
     local source_width = obs.obs_source_get_width(source)
     local source_height = obs.obs_source_get_height(source)
     
-    -- Trova il monitor su cui si trova il mouse
-    local current_monitor = monitors[1]  -- Default al primo monitor
+    -- Find the monitor where the mouse is located
+    local current_monitor = monitors[1]  -- Default to the first monitor
     for _, monitor in ipairs(monitors) do
         if mouse_x >= monitor.left and mouse_x < monitor.right and
            mouse_y >= monitor.top and mouse_y < monitor.bottom then
@@ -370,20 +370,25 @@ local function get_target_crop(mouse_x, mouse_y, current_zoom)
     }
 end
 
--- Funzione per l'animazione dello zoom
+-- Function for zoom animation
 local function animate_zoom()
-    if not source then return end
+    if not source or (not zoom_active and not follow_active) then
+        obs.timer_remove(animate_zoom)
+        animation_timer = nil
+        return
+    end
 
-    local current_time = obs.os_gettime_ns() / 1000000 -- Converti nanosecondi in millisecondi
+    local current_time = obs.os_gettime_ns() / 1000000 -- Convert nanoseconds to milliseconds
     local elapsed_time = current_time - zoom_start_time
     local progress = math.min(elapsed_time / ZOOM_ANIMATION_DURATION, 1.0)
     
-    current_zoom = 1.0 + (target_zoom - 1.0) * progress * zoom_speed
+    if zoom_active then
+        current_zoom = 1.0 + (target_zoom - 1.0) * progress * zoom_speed
+    end
     
     local mouse_x, mouse_y = get_mouse_pos()
     local new_crop = get_target_crop(mouse_x, mouse_y, current_zoom)
     
-    -- Applica follow_speed
     if follow_active then
         current_crop = current_crop or {left = 0, top = 0, right = 0, bottom = 0}
         new_crop.left = current_crop.left + (new_crop.left - current_crop.left) * follow_speed
@@ -395,22 +400,17 @@ local function animate_zoom()
     update_crop(new_crop.left, new_crop.top, new_crop.right, new_crop.bottom)
     current_crop = new_crop
     
-    if progress >= 1.0 then
-        if not zoom_active and not follow_active then
-            obs.timer_remove(animate_zoom)
-            animation_timer = nil
-        elseif not follow_active then
-            obs.timer_remove(animate_zoom)
-            animation_timer = nil
-        end
+    if progress >= 1.0 and not follow_active then
+        obs.timer_remove(animate_zoom)
+        animation_timer = nil
     end
 end
 
--- Funzione per lo zoom out smooth
+-- Function for smooth zoom out
 local function smooth_zoom_out()
     local start_zoom = current_zoom
-    local start_time = obs.os_gettime_ns() / 1000000 -- Converti nanosecondi in millisecondi
-    local duration = 500 -- 500 ms per lo zoom out
+    local start_time = obs.os_gettime_ns() / 1000000 -- Convert nanoseconds to milliseconds
+    local duration = 500 -- 500 ms for zoom out
 
     local function animate_zoom_out()
         local current_time = obs.os_gettime_ns() / 1000000
@@ -420,26 +420,45 @@ local function smooth_zoom_out()
         
         local mouse_x, mouse_y = get_mouse_pos()
         local new_crop = get_target_crop(mouse_x, mouse_y, current_zoom)
+        
+        if follow_active then
+            current_crop = current_crop or {left = 0, top = 0, right = 0, bottom = 0}
+            new_crop.left = current_crop.left + (new_crop.left - current_crop.left) * follow_speed
+            new_crop.top = current_crop.top + (new_crop.top - current_crop.top) * follow_speed
+            new_crop.right = current_crop.right + (new_crop.right - current_crop.right) * follow_speed
+            new_crop.bottom = current_crop.bottom + (new_crop.bottom - current_crop.bottom) * follow_speed
+        end
+        
         update_crop(new_crop.left, new_crop.top, new_crop.right, new_crop.bottom)
+        current_crop = new_crop
         
         if progress >= 1.0 then
             obs.timer_remove(animate_zoom_out)
-            if crop_filter then
-                obs.obs_source_filter_remove(current_filter_target, crop_filter)
-                crop_filter = nil
-            end
-            current_filter_target = nil
             zoom_active = false
-            follow_active = false
+            if not follow_active then
+                if crop_filter then
+                    obs.obs_source_filter_remove(current_filter_target, crop_filter)
+                    crop_filter = nil
+                end
+                current_filter_target = nil
+                if animation_timer then
+                    obs.timer_remove(animate_zoom)
+                    animation_timer = nil
+                end
+            end
         end
     end
 
-    obs.timer_add(animate_zoom_out, 16) -- Circa 60 FPS
+    if animation_timer then
+        obs.timer_remove(animate_zoom)
+        animation_timer = nil
+    end
+    obs.timer_add(animate_zoom_out, 16) -- Approximately 60 FPS
 end
 
--- Gestori degli hotkey
+-- Hotkey handlers
 
--- Gestore dell'hotkey per lo zoom
+-- Handler for zoom hotkey
 local function on_zoom_hotkey(pressed)
     if not pressed then return end
 
@@ -452,6 +471,8 @@ local function on_zoom_hotkey(pressed)
     end
 
     if zoom_active then
+        zoom_active = false
+        follow_active = false  -- Also deactivate follow when zoom is deactivated
         smooth_zoom_out()
     else
         zoom_active = true
@@ -468,33 +489,36 @@ local function on_zoom_hotkey(pressed)
     end
 
     log("Zoom " .. (zoom_active and "activated" or "deactivating"))
+    if not zoom_active then
+        log("Follow deactivated automatically")
+    end
 end
 
--- Gestore dell'hotkey per il follow
+-- Handler for follow hotkey
 local function on_follow_hotkey(pressed)
-    if not pressed or not zoom_active then return end
+    if not pressed then return end
+
+    if not zoom_active then
+        log("Follow can only be activated when zoom is active.")
+        return
+    end
 
     follow_active = not follow_active
     if follow_active then
         if not animation_timer then
-            animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL) -- Circa 30 FPS
-        end
-    else
-        if animation_timer and not zoom_active then
-            obs.timer_remove(animate_zoom)
-            animation_timer = nil
+            animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL)
         end
     end
     log("Follow " .. (follow_active and "activated" or "deactivated"))
 end
 
--- Aggiungi questa nuova funzione per gestire il cambio di scena
+-- Function to handle scene changes
 local function on_scene_change()
     local new_scene = obs.obs_frontend_get_current_scene()
     if new_scene ~= current_scene then
         current_scene = new_scene
         
-        -- Rimuovi il filtro dalla scena precedente se esiste
+        -- Remove the filter from the previous scene if it exists
         if current_filter_target then
             local old_filter = obs.obs_source_get_filter_by_name(current_filter_target, CROP_FILTER_NAME)
             if old_filter then
@@ -503,18 +527,18 @@ local function on_scene_change()
             end
         end
         
-        -- Trova una nuova sorgente video valida nella nuova scena
+        -- Find a new valid video source in the new scene
         source = find_valid_video_source()
         
         if source then
-            -- Applica il filtro alla nuova sorgente
+            -- Apply the filter to the new source
             apply_crop_filter(source)
             
             if zoom_active then
-                -- Se lo zoom era attivo, riapplica lo zoom alla nuova scena gradualmente
+                -- If zoom was active, gradually reapply zoom to the new scene
                 local start_crop = {left = 0, top = 0, right = 0, bottom = 0}
                 local end_crop = get_target_crop(mouse_x, mouse_y, current_zoom)
-                local transition_duration = 300 -- millisecondi
+                local transition_duration = 300 -- milliseconds
                 local start_time = obs.os_gettime_ns() / 1000000
                 
                 local function transition_crop()
@@ -531,17 +555,17 @@ local function on_scene_change()
                     update_crop(new_crop.left, new_crop.top, new_crop.right, new_crop.bottom)
                     
                     if progress < 1.0 then
-                        obs.timer_add(transition_crop, 16)
+                        obs.timer_add(transition_crop, UPDATE_INTERVAL)
                     end
                 end
                 
                 transition_crop()
             else
-                -- Se lo zoom non era attivo, assicurati che il filtro sia impostato senza zoom
+                -- If zoom wasn't active, ensure the filter is set without zoom
                 update_crop(0, 0, 0, 0)
             end
         else
-            -- Se non viene trovata una fonte valida, disattiva lo zoom
+            -- If no valid source is found, deactivate zoom
             zoom_active = false
             follow_active = false
             if animation_timer then
@@ -554,14 +578,14 @@ local function on_scene_change()
     obs.obs_source_release(new_scene)
 end
 
--- Funzioni OBS
+-- OBS functions
 
--- Descrizione dello script
+-- Script description
 function script_description()
     return "Zoom and follow mouse for OBS Studio. Supports multi-monitor setups."
 end
 
--- Proprietà dello script
+-- Script properties
 function script_properties()
     local props = obs.obs_properties_create()
     obs.obs_properties_add_float_slider(props, "zoom_value", "Zoom Value", 1.1, 5.0, 0.1)
@@ -571,7 +595,7 @@ function script_properties()
     return props
 end
 
--- Valori predefiniti
+-- Default values
 function script_defaults(settings)
     obs.obs_data_set_default_double(settings, "zoom_value", 2.0)
     obs.obs_data_set_default_double(settings, "zoom_speed", 0.1)
@@ -579,7 +603,7 @@ function script_defaults(settings)
     obs.obs_data_set_default_bool(settings, "debug_mode", false)
 end
 
--- Aggiornamento delle impostazioni
+-- Settings update
 function script_update(settings)
     zoom_value = obs.obs_data_get_double(settings, "zoom_value")
     zoom_speed = obs.obs_data_get_double(settings, "zoom_speed")
@@ -591,9 +615,9 @@ function script_update(settings)
     end
 end
 
--- Caricamento dello script
+-- Script loading
 function script_load(settings)
-    get_monitors_info()  -- Ottiene le informazioni sui monitor all'avvio
+    get_monitors_info()  -- Get monitor information at startup
 
     zoom_hotkey_id = obs.obs_hotkey_register_frontend(ZOOM_HOTKEY_NAME, "Toggle Zoom", on_zoom_hotkey)
     follow_hotkey_id = obs.obs_hotkey_register_frontend(FOLLOW_HOTKEY_NAME, "Toggle Follow", on_follow_hotkey)
@@ -606,7 +630,7 @@ function script_load(settings)
     obs.obs_hotkey_load(follow_hotkey_id, follow_hotkey_save_array)
     obs.obs_data_array_release(follow_hotkey_save_array)
 
-    -- Aggiungi il gestore di eventi per il cambio di scena
+    -- Add event handler for scene changes
     obs.obs_frontend_add_event_callback(function(event)
         if event == obs.OBS_FRONTEND_EVENT_SCENE_CHANGED then
             on_scene_change()
@@ -615,14 +639,14 @@ function script_load(settings)
 
     script_update(settings)
     
-    -- Applica il filtro alla scena corrente all'avvio
+    -- Apply filter to current scene at startup
     source = find_valid_video_source()
     if source then
         apply_crop_filter(source)
     end
 end
 
--- Salvataggio dello script
+-- Script saving
 function script_save(settings)
     local zoom_hotkey_save_array = obs.obs_hotkey_save(zoom_hotkey_id)
     obs.obs_data_set_array(settings, ZOOM_HOTKEY_NAME, zoom_hotkey_save_array)
@@ -633,7 +657,7 @@ function script_save(settings)
     obs.obs_data_array_release(follow_hotkey_save_array)
 end
 
--- Scaricamento dello script
+-- Script unloading
 function script_unload()
     if animation_timer then
         obs.timer_remove(animate_zoom)

@@ -1,4 +1,4 @@
-# OBS - Zoom and Follow Mouse EG
+# OBS - Zoom, Follow Mouse and MORE EG
 
 🚀 **We're looking for testers!** 🚀
 
@@ -83,7 +83,7 @@ This script is released under the GNU General Public License v3.0. See the LICEN
 
 ## Version
 
-Current version: 1.1
+Current version: 1.1.2
 
 ## Author
 
@@ -116,7 +116,25 @@ We're committed to keeping the code as simple and efficient as possible while fo
 
 ## Changelog
 
-### Version 1.1 (Latest)
+### Version 1.1.2 (Latest)
+
+- Improved zoom and follow functionality:
+  - Follow is now automatically deactivated when zoom is turned off
+  - Follow can only be activated when zoom is active
+- Enhanced animation handling:
+  - Fixed issues with animation timers not being properly removed
+  - Improved smooth zoom out functionality
+- Optimized performance:
+  - Reduced unnecessary function calls and timer activations
+- Improved error handling and logging
+
+### Version 1.1.1
+
+- Fixed multi-monitor support issues
+- Improved scene switching behavior
+- Enhanced error handling and debug logging
+
+### Version 1.1
 
 - Added debug mode for easier troubleshooting
 - Improved multi-monitor support
