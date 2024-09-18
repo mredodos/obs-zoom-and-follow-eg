@@ -8,6 +8,7 @@ local ffi = require("ffi")
 local ZOOM_HOTKEY_NAME = "zoom_and_follow.zoom.toggle"
 local FOLLOW_HOTKEY_NAME = "zoom_and_follow.follow.toggle"
 local CROP_FILTER_NAME = "zoom_and_follow_crop"
+local UPDATE_INTERVAL = 16
 
 -- Variabili globali
 local zoom_active = false
@@ -331,7 +332,7 @@ local function on_zoom_hotkey(pressed)
         zoom_start_time = obs.os_gettime_ns() / 1000000
         
         if not animation_timer then
-            animation_timer = obs.timer_add(animate_zoom, 33)
+            animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL)
         end
     end
 
@@ -345,7 +346,7 @@ local function on_follow_hotkey(pressed)
     follow_active = not follow_active
     if follow_active then
         if not animation_timer then
-            animation_timer = obs.timer_add(animate_zoom, 33) -- Circa 30 FPS
+            animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL) -- Circa 30 FPS
         end
     else
         if animation_timer and not zoom_active then
