@@ -1,5 +1,5 @@
 -- Zoom e Follow Mouse per OBS Studio
--- Versione 1.1
+-- Versione 1.2
 
 local obs = obslua
 local ffi = require("ffi")

@@ -96,3 +96,38 @@ A special thanks to the OBS Studio community for their support and feedback.
 ## Inspiration
 
 This script is inspired by various zoom and follow scripts in the OBS community, with additional features and improvements for multi-monitor support and smooth transitions.
+
+## Roadmap
+
+We have exciting plans for future enhancements to this script. Here's what you can look forward to:
+
+1. **Snapshot Feature**: Ability to capture snapshots of the zoomed video source.
+2. **Cursor Highlighting**:
+   - Visual highlighting of the cursor on the screen.
+   - Emphasizing mouse clicks with visual indicators.
+3. **Continuous Improvement**:
+   - Ongoing optimization for simplicity and usability.
+   - Regular updates to maintain compatibility with the latest OBS Studio versions.
+4. **Enhanced Documentation**:
+   - Continuous improvement of code comments and documentation.
+   - Making the script more accessible to programmers of all skill levels.
+
+We're committed to keeping the code as simple and efficient as possible while following best programming practices. Your feedback and contributions are always welcome to help shape the future of this script!
+
+## Changelog
+
+### Version 1.1 (Latest)
+
+- Added debug mode for easier troubleshooting
+- Improved multi-monitor support
+- Enhanced scene switching management
+- Implemented smooth transitions during scene changes
+- Optimized zoom and follow animations for better performance
+- Added customizable zoom and tracking speeds
+
+### Version 1.0
+
+- Initial release
+- Basic zoom and follow functionality
+- Support for Windows
+- Hotkey activation for zoom and follow features
