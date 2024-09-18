@@ -1,5 +1,16 @@
 # OBS - Zoom and Follow Mouse EG
 
+🚀 **We're looking for testers!** 🚀
+
+> 🐧 **Linux** and 🍎 **macOS** users, we need your help!
+>
+> We're actively seeking testers to ensure smooth functionality across all platforms.
+> If you're using Linux or macOS, please try out this script and share your feedback.
+> Your input is crucial for improving cross-platform compatibility!
+>
+> To get involved, simply install the script and report any issues or successes.
+> Thank you for your support! 🙏
+
 ## Description
 
 This script for OBS Studio creates a dynamic zoom effect and follows mouse movement on a selected video source. It is particularly useful for highlighting specific parts of the screen during recordings or live streaming, with support for multi-monitor setups.
