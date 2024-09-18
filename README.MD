@@ -2,7 +2,7 @@
 
 ## Description
 
-This script for OBS Studio creates a dynamic zoom effect and follows the mouse movement on a selected video source. It is particularly useful for highlighting specific parts of the screen during recordings or live streaming, with support for multi-monitor setups.
+This script for OBS Studio creates a dynamic zoom effect and follows mouse movement on a selected video source. It is particularly useful for highlighting specific parts of the screen during recordings or live streaming, with support for multi-monitor setups.
 
 ## Features
 
@@ -14,6 +14,7 @@ This script for OBS Studio creates a dynamic zoom effect and follows the mouse m
 - Activation via hotkeys
 - Automatic scene switching management
 - Smooth transitions during scene changes
+- Debug mode for troubleshooting
 
 ## Requirements
 
@@ -34,6 +35,7 @@ The script offers several configuration options:
 - Zoom Value: Sets the maximum zoom level (from 1.1 to 5.0)
 - Zoom Speed: Adjusts the speed of the zoom effect (from 0.01 to 1.0)
 - Tracking Speed: Adjusts the speed of the tracking effect (from 0.01 to 1.0)
+- Debug Mode: Enables/disables debug messages for troubleshooting
 
 ## Usage
 
@@ -48,6 +50,7 @@ The script offers several configuration options:
 - Automatic scene switching management and source removal
 - Multi-monitor configuration support
 - Smooth transitions during scene changes while in zoom mode
+- Debug mode for easier troubleshooting
 
 ## Troubleshooting
 
@@ -57,6 +60,7 @@ If you encounter issues with the script, try:
 2. Restarting OBS Studio
 3. Checking the OBS logs for any error messages
 4. Ensuring your version of OBS Studio is compatible
+5. Enabling debug mode in the script settings for more information
 
 ## Support
 
