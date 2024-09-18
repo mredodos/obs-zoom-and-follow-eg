@@ -461,8 +461,8 @@ end
 function script_load(settings)
     get_monitors_info()  -- Ottiene le informazioni sui monitor all'avvio
 
-    zoom_hotkey_id = obs.obs_hotkey_register_frontend(ZOOM_HOTKEY_NAME, "Attiva/Disattiva Zoom", on_zoom_hotkey)
-    follow_hotkey_id = obs.obs_hotkey_register_frontend(FOLLOW_HOTKEY_NAME, "Attiva/Disattiva Follow", on_follow_hotkey)
+    zoom_hotkey_id = obs.obs_hotkey_register_frontend(ZOOM_HOTKEY_NAME, "Toggle Zoom", on_zoom_hotkey)
+    follow_hotkey_id = obs.obs_hotkey_register_frontend(FOLLOW_HOTKEY_NAME, "Toggle Follow", on_follow_hotkey)
 
     local zoom_hotkey_save_array = obs.obs_data_get_array(settings, ZOOM_HOTKEY_NAME)
     obs.obs_hotkey_load(zoom_hotkey_id, zoom_hotkey_save_array)

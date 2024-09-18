@@ -1,87 +1,83 @@
 # OBS - Zoom and Follow Mouse EG
 
-## Description
+## Descrizione
 
-This OBS Studio script creates a zoom effect and follows mouse movement on a selected video source. It's useful for highlighting specific parts of the screen during recordings or live streams.
+Questo script per OBS Studio crea un effetto di zoom dinamico e segue il movimento del mouse su una sorgente video selezionata. È particolarmente utile per evidenziare parti specifiche dello schermo durante registrazioni o streaming live, con supporto per configurazioni multi-monitor.
 
-## Features
+## Caratteristiche
 
-- Dynamic zoom on a video source
-- Follows mouse movement
-- Cross-platform support (Windows, Linux, macOS)
-- Customizable settings
-- Activation via hotkeys
+- Zoom dinamico su qualsiasi sorgente video valida
+- Movimento fluido che segue il mouse
+- Supporto multi-piattaforma (Windows, Linux, macOS)
+- Supporto multi-monitor
+- Velocità di zoom e di inseguimento personalizzabili
+- Attivazione tramite tasti di scelta rapida
+- Gestione automatica dei cambi di scena
+- Transizioni fluide durante il cambio di scena
 
-## Requirements
+## Requisiti
 
-- OBS Studio (version 27.0.0 or higher)
-- Lua 5.1 or higher
+- OBS Studio (versione 27.0.0 o superiore)
+- Lua 5.1 o superiore
 
-## Installation
+## Installazione
 
-1. Download the `obs-zoom-and-follow-mouse-eg.lua` file
-2. In OBS Studio, go to Tools > Scripts
-3. Click the "+" button and select the downloaded file
-4. Configure the script settings according to your preferences
+1. Scarica il file `obs-zoom-and-follow-mouse-eg.lua`
+2. In OBS Studio, vai su Strumenti > Script
+3. Clicca sul pulsante "+" e seleziona il file scaricato
+4. Configura le impostazioni dello script secondo le tue preferenze
 
-## Configuration
+## Configurazione
 
-The script offers several configuration options:
+Lo script offre diverse opzioni di configurazione:
 
-- Zoom Source: Select the video source to apply the zoom effect
-- Zoom Window Width: Width of the zoom window
-- Zoom Window Height: Height of the zoom window
-- Active Border: Size of the active border for movement
-- Max Scroll Speed: Maximum scrolling speed
-- Smooth Factor: Movement smoothing factor
-- Zoom Duration: Duration of the zoom animation (in milliseconds)
-- Enable Manual Offset: Enable/disable manual offset
-- Manual X Offset: Manual offset on the X-axis
-- Manual Y Offset: Manual offset on the Y-axis
-- Enable debug logging: Enable/disable debug logging
+- Valore Zoom: Imposta il livello massimo di zoom (da 1.1 a 5.0)
+- Velocità Zoom: Regola la velocità dell'effetto zoom (da 0.01 a 1.0)
+- Velocità Inseguimento: Regola la velocità dell'effetto di inseguimento (da 0.01 a 1.0)
 
-## Usage
+## Utilizzo
 
-1. Configure the script in OBS Studio settings
-2. Set up hotkeys to toggle zoom and follow
-3. During recording or live streaming, use the hotkeys to control the zoom effect
+1. Configura lo script nelle impostazioni di OBS Studio
+2. Imposta i tasti di scelta rapida per attivare/disattivare lo zoom e l'inseguimento
+3. Durante la registrazione o lo streaming live, usa i tasti di scelta rapida per controllare gli effetti di zoom e inseguimento
 
-## Main Functions
+## Funzioni Principali
 
-- Dynamic zoom on the selected source
-- Follows mouse movement with customizable smoothing
-- Automatic handling of scene changes and source removal
-- Support for manual mouse offset
+- Zoom dinamico sulla sorgente selezionata con animazione fluida
+- Inseguimento del movimento del mouse con smussatura personalizzabile
+- Gestione automatica dei cambi di scena e rimozione della sorgente
+- Supporto per configurazioni multi-monitor
+- Transizioni fluide durante il cambio di scena mentre si è in modalità zoom
 
-## Troubleshooting
+## Risoluzione dei problemi
 
-If you encounter issues with the script, try:
+Se incontri problemi con lo script, prova a:
 
-1. Verifying that the selected source is valid and active
-2. Restarting OBS Studio
-3. Checking OBS logs for any error messages
-4. Enabling debug logging in the script settings for more information
+1. Verificare che ci sia una sorgente video valida nella scena corrente
+2. Riavviare OBS Studio
+3. Controllare i log di OBS per eventuali messaggi di errore
+4. Assicurarti che la tua versione di OBS Studio sia compatibile
 
-## Support
+## Supporto
 
-To report bugs or request new features, open an issue on GitHub or contact the script author.
+Per segnalare bug o richiedere nuove funzionalità, apri un issue su GitHub o contatta l'autore dello script.
 
-## License
+## Licenza
 
-This script is released under the GNU General Public License v3.0. See the LICENSE file for more details.
+Questo script è rilasciato sotto la GNU General Public License v3.0. Vedi il file LICENSE per maggiori dettagli.
 
-## Version
+## Versione
 
-Current version: 0.1.0
+Versione corrente: 1.1
 
-## Author
+## Autore
 
 Edoardo Guzzi
 
-## Acknowledgements
+## Ringraziamenti
 
-Special thanks to the OBS Studio community for their support and feedback.
+Un ringraziamento speciale alla comunità di OBS Studio per il loro supporto e feedback.
 
-## Inspiration
+## Ispirazione
 
-This script is inspired by the [tryptech/obs-zoom-and-follow](https://github.com/tryptech/obs-zoom-and-follow) repository. We appreciate their work and contribution to the OBS community.
+Questo script è ispirato a vari script di zoom e inseguimento nella comunità OBS, con funzionalità aggiuntive e miglioramenti per il supporto multi-monitor e transizioni fluide.
