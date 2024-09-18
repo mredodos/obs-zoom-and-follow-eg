@@ -84,6 +84,71 @@ local function get_monitors_info()
         local callback = ffi.cast("MONITORENUMPROC", enum_callback)
         ffi.C.EnumDisplayMonitors(nil, nil, callback, 0)
         callback:free()
+    elseif ffi.os == "Linux" then
+        ffi.cdef[[
+            typedef struct {
+                int x, y;
+                int width, height;
+            } XRRMonitorInfo;
+
+            typedef void* Display;
+            typedef unsigned long Window;
+
+            Display* XOpenDisplay(const char*);
+            void XCloseDisplay(Display*);
+            Window DefaultRootWindow(Display*);
+            XRRMonitorInfo* XRRGetMonitors(Display*, Window, int, int*);
+            void XRRFreeMonitors(XRRMonitorInfo*);
+        ]]
+
+        local x11 = ffi.load("X11")
+        local xrandr = ffi.load("Xrandr")
+
+        local display = x11.XOpenDisplay(nil)
+        if display ~= nil then
+            local root = x11.DefaultRootWindow(display)
+            local count = ffi.new("int[1]")
+            local info = xrandr.XRRGetMonitors(display, root, 1, count)
+            
+            for i = 0, count[0] - 1 do
+                table.insert(monitors, {
+                    left = info[i].x,
+                    top = info[i].y,
+                    right = info[i].x + info[i].width,
+                    bottom = info[i].y + info[i].height
+                })
+            end
+
+            xrandr.XRRFreeMonitors(info)
+            x11.XCloseDisplay(display)
+        end
+    elseif ffi.os == "OSX" then
+        ffi.cdef[[
+            typedef struct CGDirectDisplayID *CGDirectDisplayID;
+            typedef uint32_t CGDisplayCount;
+            typedef struct CGRect CGRect;
+
+            int CGGetActiveDisplayList(CGDisplayCount maxDisplays, CGDirectDisplayID *activeDisplays, CGDisplayCount *displayCount);
+            CGRect CGDisplayBounds(CGDirectDisplayID display);
+        ]]
+
+        local core_graphics = ffi.load("CoreGraphics", true)
+
+        local max_displays = 32
+        local active_displays = ffi.new("CGDirectDisplayID[?]", max_displays)
+        local display_count = ffi.new("CGDisplayCount[1]")
+
+        if core_graphics.CGGetActiveDisplayList(max_displays, active_displays, display_count) == 0 then
+            for i = 0, display_count[0] - 1 do
+                local bounds = core_graphics.CGDisplayBounds(active_displays[i])
+                table.insert(monitors, {
+                    left = bounds.origin.x,
+                    top = bounds.origin.y,
+                    right = bounds.origin.x + bounds.size.width,
+                    bottom = bounds.origin.y + bounds.size.height
+                })
+            end
+        end
     else
         -- Per altri sistemi operativi, usa valori predefiniti per un singolo monitor
         monitors = {{left = 0, top = 0, right = 1920, bottom = 1080}}
@@ -102,6 +167,58 @@ local function get_mouse_pos()
         if ffi.C.GetCursorPos(point) then
             return point[0].x, point[0].y
         end
+    elseif ffi.os == "Linux" then
+        ffi.cdef[[
+            typedef struct {
+                int x, y;
+                int dummy1, dummy2, dummy3;
+                int dummy4, dummy5, dummy6;
+            } XButtonEvent;
+
+            typedef void* Display;
+            typedef unsigned long Window;
+
+            Display* XOpenDisplay(const char*);
+            void XCloseDisplay(Display*);
+            Window DefaultRootWindow(Display*);
+            int XQueryPointer(Display*, Window, Window*, Window*, int*, int*, int*, int*, unsigned int*);
+        ]]
+
+        local x11 = ffi.load("X11")
+
+        local display = x11.XOpenDisplay(nil)
+        if display ~= nil then
+            local root = x11.DefaultRootWindow(display)
+            local root_x = ffi.new("int[1]")
+            local root_y = ffi.new("int[1]")
+            local win_x = ffi.new("int[1]")
+            local win_y = ffi.new("int[1]")
+            local mask = ffi.new("unsigned int[1]")
+            local child = ffi.new("Window[1]")
+            local child_revert = ffi.new("Window[1]")
+
+            if x11.XQueryPointer(display, root, child_revert, child, root_x, root_y, win_x, win_y, mask) ~= 0 then
+                x11.XCloseDisplay(display)
+                return root_x[0], root_y[0]
+            end
+
+            x11.XCloseDisplay(display)
+        end
+    elseif ffi.os == "OSX" then
+        ffi.cdef[[
+            typedef struct CGPoint CGPoint;
+            CGPoint CGEventGetLocation(void* event);
+            void* CGEventCreate(void* source);
+            void CFRelease(void* cf);
+        ]]
+
+        local core_graphics = ffi.load("CoreGraphics", true)
+
+        local event = core_graphics.CGEventCreate(nil)
+        local point = core_graphics.CGEventGetLocation(event)
+        core_graphics.CFRelease(event)
+
+        return point.x, point.y
     end
     return 0, 0  -- Fallback se non riusciamo a ottenere la posizione del mouse
 end
