@@ -2,15 +2,18 @@
 
 ## Description
 
-This OBS Studio script creates a zoom effect and follows mouse movement on a selected video source. It's useful for highlighting specific parts of the screen during recordings or live streams.
+This script for OBS Studio creates a dynamic zoom effect and follows the mouse movement on a selected video source. It is particularly useful for highlighting specific parts of the screen during recordings or live streaming, with support for multi-monitor setups.
 
 ## Features
 
-- Dynamic zoom on a video source
-- Follows mouse movement
+- Dynamic zoom on any valid video source
+- Smooth mouse-follow movement
 - Cross-platform support (Windows, Linux, macOS)
-- Customizable settings
+- Multi-monitor support
+- Customizable zoom and tracking speeds
 - Activation via hotkeys
+- Automatic scene switching management
+- Smooth transitions during scene changes
 
 ## Requirements
 
@@ -28,43 +31,36 @@ This OBS Studio script creates a zoom effect and follows mouse movement on a sel
 
 The script offers several configuration options:
 
-- Zoom Source: Select the video source to apply the zoom effect
-- Zoom Window Width: Width of the zoom window
-- Zoom Window Height: Height of the zoom window
-- Active Border: Size of the active border for movement
-- Max Scroll Speed: Maximum scrolling speed
-- Smooth Factor: Movement smoothing factor
-- Zoom Duration: Duration of the zoom animation (in milliseconds)
-- Enable Manual Offset: Enable/disable manual offset
-- Manual X Offset: Manual offset on the X-axis
-- Manual Y Offset: Manual offset on the Y-axis
-- Enable debug logging: Enable/disable debug logging
+- Zoom Value: Sets the maximum zoom level (from 1.1 to 5.0)
+- Zoom Speed: Adjusts the speed of the zoom effect (from 0.01 to 1.0)
+- Tracking Speed: Adjusts the speed of the tracking effect (from 0.01 to 1.0)
 
 ## Usage
 
 1. Configure the script in OBS Studio settings
-2. Set up hotkeys to toggle zoom and follow
-3. During recording or live streaming, use the hotkeys to control the zoom effect
+2. Set hotkeys to enable/disable zoom and tracking
+3. During recording or live streaming, use the hotkeys to control the zoom and tracking effects
 
 ## Main Functions
 
-- Dynamic zoom on the selected source
-- Follows mouse movement with customizable smoothing
-- Automatic handling of scene changes and source removal
-- Support for manual mouse offset
+- Dynamic zoom on the selected source with smooth animation
+- Mouse movement tracking with customizable smoothing
+- Automatic scene switching management and source removal
+- Multi-monitor configuration support
+- Smooth transitions during scene changes while in zoom mode
 
 ## Troubleshooting
 
 If you encounter issues with the script, try:
 
-1. Verifying that the selected source is valid and active
+1. Ensuring there is a valid video source in the current scene
 2. Restarting OBS Studio
-3. Checking OBS logs for any error messages
-4. Enabling debug logging in the script settings for more information
+3. Checking the OBS logs for any error messages
+4. Ensuring your version of OBS Studio is compatible
 
 ## Support
 
-To report bugs or request new features, open an issue on GitHub or contact the script author.
+To report bugs or request new features, open an issue on GitHub or contact the script's author.
 
 ## License
 
@@ -72,16 +68,16 @@ This script is released under the GNU General Public License v3.0. See the LICEN
 
 ## Version
 
-Current version: 0.1.0
+Current version: 1.1
 
 ## Author
 
 Edoardo Guzzi
 
-## Acknowledgements
+## Acknowledgments
 
-Special thanks to the OBS Studio community for their support and feedback.
+A special thanks to the OBS Studio community for their support and feedback.
 
 ## Inspiration
 
-This script is inspired by the [tryptech/obs-zoom-and-follow](https://github.com/tryptech/obs-zoom-and-follow) repository. We appreciate their work and contribution to the OBS community.
+This script is inspired by various zoom and follow scripts in the OBS community, with additional features and improvements for multi-monitor support and smooth transitions.
