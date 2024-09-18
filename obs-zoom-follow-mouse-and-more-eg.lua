@@ -1,5 +1,5 @@
--- Zoom e Follow Mouse per OBS Studio
--- Versione 1.2
+-- Zoom, Follow Mouse and MORE per OBS Studio
+-- Versione 1.1.2
 
 local obs = obslua
 local ffi = require("ffi")
@@ -372,7 +372,11 @@ end
 
 -- Funzione per l'animazione dello zoom
 local function animate_zoom()
-    if not source then return end
+    if not source or (not zoom_active and not follow_active) then
+        obs.timer_remove(animate_zoom)
+        animation_timer = nil
+        return
+    end
 
     local current_time = obs.os_gettime_ns() / 1000000 -- Converti nanosecondi in millisecondi
     local elapsed_time = current_time - zoom_start_time
@@ -437,14 +441,18 @@ local function smooth_zoom_out()
                     crop_filter = nil
                 end
                 current_filter_target = nil
-            else
-                -- Se follow è ancora attivo, continuiamo con l'animazione normale
-                animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL)
+                if animation_timer then
+                    obs.timer_remove(animate_zoom)
+                    animation_timer = nil
+                end
             end
         end
     end
 
-    obs.timer_remove(animate_zoom)
+    if animation_timer then
+        obs.timer_remove(animate_zoom)
+        animation_timer = nil
+    end
     obs.timer_add(animate_zoom_out, 16) -- Circa 60 FPS
 end
 
@@ -463,6 +471,8 @@ local function on_zoom_hotkey(pressed)
     end
 
     if zoom_active then
+        zoom_active = false
+        follow_active = false  -- Disattiva anche il follow quando lo zoom viene disattivato
         smooth_zoom_out()
     else
         zoom_active = true
@@ -473,28 +483,30 @@ local function on_zoom_hotkey(pressed)
         target_zoom = zoom_value
         zoom_start_time = obs.os_gettime_ns() / 1000000
         
-        if animation_timer then
-            obs.timer_remove(animate_zoom)
+        if not animation_timer then
+            animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL)
         end
-        animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL)
     end
 
     log("Zoom " .. (zoom_active and "activated" or "deactivating"))
+    if not zoom_active then
+        log("Follow deactivated automatically")
+    end
 end
 
 -- Gestore dell'hotkey per il follow
 local function on_follow_hotkey(pressed)
-    if not pressed or not zoom_active then return end
+    if not pressed then return end
+
+    if not zoom_active then
+        log("Follow can only be activated when zoom is active.")
+        return
+    end
 
     follow_active = not follow_active
     if follow_active then
         if not animation_timer then
-            animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL) -- Circa 30 FPS
-        end
-    else
-        if animation_timer and not zoom_active then
-            obs.timer_remove(animate_zoom)
-            animation_timer = nil
+            animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL)
         end
     end
     log("Follow " .. (follow_active and "activated" or "deactivated"))
