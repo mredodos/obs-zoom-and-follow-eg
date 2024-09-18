@@ -8,14 +8,14 @@ local ffi = require("ffi")
 local ZOOM_HOTKEY_NAME = "zoom_and_follow.zoom.toggle"
 local FOLLOW_HOTKEY_NAME = "zoom_and_follow.follow.toggle"
 local CROP_FILTER_NAME = "zoom_and_follow_crop"
-local UPDATE_INTERVAL = 16
+local UPDATE_INTERVAL = 33
 
 -- Variabili globali
 local zoom_active = false
 local follow_active = false
-local zoom_value = 2.0
-local zoom_speed = 0.1
-local follow_speed = 0.1
+local zoom_value = 3.0
+local zoom_speed = 0.2
+local follow_speed = 0.2
 local source = nil
 local crop_filter = nil
 local original_crop = nil
