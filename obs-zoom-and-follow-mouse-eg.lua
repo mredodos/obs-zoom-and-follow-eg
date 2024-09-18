@@ -378,12 +378,13 @@ local function animate_zoom()
     local elapsed_time = current_time - zoom_start_time
     local progress = math.min(elapsed_time / ZOOM_ANIMATION_DURATION, 1.0)
     
-    current_zoom = 1.0 + (target_zoom - 1.0) * progress * zoom_speed
+    if zoom_active then
+        current_zoom = 1.0 + (target_zoom - 1.0) * progress * zoom_speed
+    end
     
     local mouse_x, mouse_y = get_mouse_pos()
     local new_crop = get_target_crop(mouse_x, mouse_y, current_zoom)
     
-    -- Applica follow_speed
     if follow_active then
         current_crop = current_crop or {left = 0, top = 0, right = 0, bottom = 0}
         new_crop.left = current_crop.left + (new_crop.left - current_crop.left) * follow_speed
@@ -395,14 +396,9 @@ local function animate_zoom()
     update_crop(new_crop.left, new_crop.top, new_crop.right, new_crop.bottom)
     current_crop = new_crop
     
-    if progress >= 1.0 then
-        if not zoom_active and not follow_active then
-            obs.timer_remove(animate_zoom)
-            animation_timer = nil
-        elseif not follow_active then
-            obs.timer_remove(animate_zoom)
-            animation_timer = nil
-        end
+    if progress >= 1.0 and not follow_active then
+        obs.timer_remove(animate_zoom)
+        animation_timer = nil
     end
 end
 
@@ -420,21 +416,36 @@ local function smooth_zoom_out()
         
         local mouse_x, mouse_y = get_mouse_pos()
         local new_crop = get_target_crop(mouse_x, mouse_y, current_zoom)
+        
+        if follow_active then
+            current_crop = current_crop or {left = 0, top = 0, right = 0, bottom = 0}
+            new_crop.left = current_crop.left + (new_crop.left - current_crop.left) * follow_speed
+            new_crop.top = current_crop.top + (new_crop.top - current_crop.top) * follow_speed
+            new_crop.right = current_crop.right + (new_crop.right - current_crop.right) * follow_speed
+            new_crop.bottom = current_crop.bottom + (new_crop.bottom - current_crop.bottom) * follow_speed
+        end
+        
         update_crop(new_crop.left, new_crop.top, new_crop.right, new_crop.bottom)
+        current_crop = new_crop
         
         if progress >= 1.0 then
             obs.timer_remove(animate_zoom_out)
-            if crop_filter then
-                obs.obs_source_filter_remove(current_filter_target, crop_filter)
-                crop_filter = nil
-            end
-            current_filter_target = nil
             zoom_active = false
-            follow_active = false
+            if not follow_active then
+                if crop_filter then
+                    obs.obs_source_filter_remove(current_filter_target, crop_filter)
+                    crop_filter = nil
+                end
+                current_filter_target = nil
+            else
+                -- Se follow è ancora attivo, continuiamo con l'animazione normale
+                animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL)
+            end
         end
     end
 
-    obs.timer_add(animate_zoom_out, UPDATE_INTERVAL) -- Circa 60 FPS
+    obs.timer_remove(animate_zoom)
+    obs.timer_add(animate_zoom_out, 16) -- Circa 60 FPS
 end
 
 -- Gestori degli hotkey
@@ -462,9 +473,10 @@ local function on_zoom_hotkey(pressed)
         target_zoom = zoom_value
         zoom_start_time = obs.os_gettime_ns() / 1000000
         
-        if not animation_timer then
-            animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL)
+        if animation_timer then
+            obs.timer_remove(animate_zoom)
         end
+        animation_timer = obs.timer_add(animate_zoom, UPDATE_INTERVAL)
     end
 
     log("Zoom " .. (zoom_active and "activated" or "deactivating"))
